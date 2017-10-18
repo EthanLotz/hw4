@@ -1,0 +1,88 @@
+---
+title: "2017-10-16 HW4_Q1"
+author: "Ethan M. Lotz"
+date: "October 16, 2017"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("http://www.bioconductor.org/biocLite.R")
+library(plyr)
+library(dplyr)
+library(biomaRt)
+library(annotables)
+library(data.table)
+library(Biobase)
+options(stringsAsFactors = FALSE)
+```
+
+## Question 1
+Create expression matrix
+```{r}
+Q1 <- read.table("63_immune_cells/data/counts.txt.gz", header=TRUE)
+colnames(Q1) <- sub(".bam", "", colnames(Q1))
+```
+
+Note the first 6 columns are gene annotation columns. Extract them into a separate variable - this
+is a part of your feature annotation data
+```{r}
+Q1Annotation <- subset(Q1, select=c(1:6))
+```
+
+Extract the other columns into a separate variable - this is your expression matrix
+```{r}
+ExpressionMatrix <- subset(Q1, select = c(7:69))
+```
+
+Add row names (probe IDs) to the expression matrix, extracted from column “Geneid”.
+```{r}
+rownames(ExpressionMatrix) <- Q1$Geneid
+```
+
+What type of probe ID is it?
+```{r}
+print("Ensemble")
+```
+
+Create feature annotation matrix
+```{r}
+Q1Annotation <- Q1Annotation  %>% 
+    dplyr::left_join(grch37, by = c("Geneid" = "ensgene")) %>% 
+    dplyr::select(Geneid, chr, Start, End, Strand, Length, symbol, description)
+```
+
+How many probe IDs did not have mapping?
+```{r}
+sum(is.na(Q1Annotation$symbol))
+```
+
+How many probe IDs have description but no gene symbol?
+```{r}
+sum(is.na(Q1Annotation$symbol) & Q1Annotation$description!="", na.rm=TRUE)
+```
+
+Create sample annotation matrix
+```{r}
+SampleAnnotation <- read.table("63_immune_cells/data/E-MTAB-2319.sdrf.txt", sep="\t", header=TRUE, as.is=TRUE)
+SampleAnnotationMatrix <- data.frame(row.names = colnames(ExpressionMatrix), SampleAnnotation[match(colnames(ExpressionMatrix), SampleAnnotation$Comment.ENA_RUN.), ])
+```
+
+How many different cell types are there?
+```{r}
+data.table(SampleAnnotationMatrix)[, uniqueN(Factor.Value.cell.type.)]
+```
+
+How many replicates per cell type?
+```{r}
+ddply(SampleAnnotationMatrix,.(Factor.Value.cell.type.),nrow)
+```
+
+Create a minimal ExpressionSet using expression (assayData) and sample annotation (phenoData)
+matrices. Print the resulting ExpressionSet
+```{r}
+phenoChar1 <- new("AnnotatedDataFrame", data = SampleAnnotationMatrix)
+MinimalSet <- ExpressionSet(assayData = as.matrix(ExpressionMatrix), phenoData = phenoChar1)
+MinimalSet
+```
+
+

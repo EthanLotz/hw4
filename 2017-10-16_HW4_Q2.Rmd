@@ -1,0 +1,147 @@
+---
+title: "2017-10-16 HW4_Q2"
+author: "Ethan M. Lotz"
+date: "October 17, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+source("http://www.bioconductor.org/biocLite.R")
+library(plyr)
+library(dplyr)
+library(biomaRt)
+library(annotables)
+library(data.table)
+library(Biobase)
+library(DT)
+options(stringsAsFactors = FALSE)
+```
+
+## Question 2
+
+```{r}
+Q1 <- read.table("63_immune_cells/data/counts.txt.gz", header=TRUE)
+colnames(Q1) <- sub(".bam", "", colnames(Q1))
+ExpressionMatrix <- subset(Q1, select = c(7:69))
+rownames(ExpressionMatrix) <- Q1$Geneid
+```
+
+log2-transform the expression matrix + 1. Why add 1 when log-transforming?
+```{r}
+#mtx.expr <- limma::normalizeQuantiles(log2(ExpressionMatrix + 1))
+log2ExpressionMatrix <- (log2(ExpressionMatrix + 1))
+print("Need to add 1 so the calculations will avoid taking the log of 0 which is equal to negative infinity")
+```
+
+Do boxplot on the expression matrix. Write observations about the data
+```{r}
+boxplot(log2ExpressionMatrix)
+print("The distributions of each group looks very similar.")
+```
+
+How many rows with all zeros are there? Exclude them from the expression matrix.
+```{r}
+sum(rowSums(log2ExpressionMatrix)==0)
+NoZeroEM <- log2ExpressionMatrix[apply(log2ExpressionMatrix[c(1:63)],1,function(z) any(z!=0)),]
+```
+
+Get the list of housekeeping genes from http://www.tau.ac.il/~elieis/HKG/
+```{r}
+HouseKeepingGenes <- read.table("HK_genes.txt", col.names = c("Gene", "AccessNo"))
+Q1Annotation <- subset(Q1, select=c(1:6))
+Q1Annotation <- Q1Annotation  %>% 
+    dplyr::left_join(grch37, by = c("Geneid" = "ensgene")) %>% 
+    dplyr::select(Geneid, chr, Start, End, Strand, Length, symbol, description)
+
+HouseKeepingVector <- HouseKeepingGenes[,1]
+a <- which(Q1Annotation$symbol %in% HouseKeepingVector)
+mtx.annot_sel <- Q1Annotation$Geneid[a]
+
+```
+
+Separate the expression matrix into two matrices, one containing expression of housekeeping genes and another containing all other genes.
+```{r}
+EM_HouseKeeping  <- NoZeroEM[rownames(NoZeroEM) %in% mtx.annot_sel,]
+EM_Other  <- NoZeroEM[!(rownames(NoZeroEM) %in% mtx.annot_sel),]
+```
+
+What is the mean/median standard deviation across samples of housekeeping genes?
+```{r}
+mean(as.matrix(EM_HouseKeeping))
+median(as.matrix(EM_HouseKeeping))
+sd(as.matrix(EM_HouseKeeping))
+```
+
+Of other genes?
+```{r}
+mean(as.matrix(EM_Other))
+median(as.matrix(EM_Other))
+sd(as.matrix(EM_Other))
+```
+
+If you are to compare two distributions of standard deviations - which test would you use? 
+```{r}
+print("I would use an F-test to compare two distributions of standard deviations.")
+```
+
+Applied to the current data, are the standard deviations of housekeeping genes different from the rest of the genes?
+```{r}
+var.test(as.matrix(EM_HouseKeeping), as.matrix(EM_Other))
+
+print("Results of the test result in a p-value < 2.2e16 so we reject the null hypothesis in favor of the alternative and assume the standard deviation is different between the housekeeping genes and the other genes.")
+```
+
+Summarize median gene expression per cell type. Keep rows annotates with gene symbols. Display the summary expression matrix (gene symbols as rows, cell types as columns, each cell is median expression) as DT::datatable.
+```{r}
+#annot <- read.table("63_immune_cells/data/E-MTAB-2319.sdrf.txt", sep="\t", header = T, as.is = T)
+#mtx.annot <- data.frame(SampleID = colnames(NoZeroEM), annot[ match(colnames(NoZeroEM), annot$Comment.ENA_RUN.), ])
+
+#mtx.annot_BCD5 <- mtx.annot$SampleID[grep("B CD5", mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_BCD5  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_BCD5]
+
+#mtx.annot_BMemory <- mtx.annot$SampleID[grep("B Memory", mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_BMemory  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_BMemory]
+
+
+#mtx.annot_BNaive <- mtx.annot$SampleID[grep("B Naive", mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_BNaive  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_BNaive]
+
+#mtx.annot_CD4CentralMemory <- mtx.annot$SampleID[grep("CD4 Central Memory",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD4CentralMemory  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD4CentralMemory]
+
+#mtx.annot_CD4EffectorMemory <- mtx.annot$SampleID[grep("CD4 Effector Memory",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD4EffectorMemory  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD4EffectorMemory]
+
+#mtx.annot_CD4Naive <- mtx.annot$SampleID[grep("CD4 Naive",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD4Naive  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD4Naive]
+
+#mtx.annot_Th1 <- mtx.annot$SampleID[grep("Th1",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_Th1  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_Th1]
+
+#mtx.annot_Th17 <- mtx.annot$SampleID[grep("Th17",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_Th17  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_Th17]
+
+#mtx.annot_Th2 <- mtx.annot$SampleID[grep("Th2",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_Th2  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_Th2]
+
+#mtx.annot_Treg <- mtx.annot$SampleID[grep("Treg",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_Treg  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_Treg]
+
+#mtx.annot_CD8CentralMemory <- mtx.annot$SampleID[grep("CD8 Central Memory",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD8CentralMemory  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD8CentralMemory]
+
+#mtx.annot_CD8EffectorMemory <- mtx.annot$SampleID[grep("CD8 Effector Memory",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD8EffectorMemory  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD8EffectorMemory]
+
+#mtx.annot_CD8Naive <- mtx.annot$SampleID[grep("CD8 Naive",mtx.annot$Characteristics.cell.type., ignore.case = TRUE)]
+#EM_CD8Naive  <- NoZeroEM[, colnames(NoZeroEM) %in% mtx.annot_CD8Naive]
+
+
+#CellExpression <- data.frame(EM_BCD5, EM_CD8Naive)
+#DT=data.table(Gene = Q1Annotation$symbol, )
+print("Assuming any of this is correct so far I would eventually put the individual dataframes into a new data table using data.table and then use datatable on the new data.table type. But my r skills are limited and I couldn't figure this out.")
+
+
+```
+
